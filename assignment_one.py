@@ -47,6 +47,13 @@ def processOneTweet(map,inputLine):
     return map.idFromCoordinates(x_input,y_input)
 
 def processTwitterData(map,twitterFilePath,grid_counts):
+
+    #Reduce sum operation for counter module (for MPI)
+    def sumCounter(counterOne,counterTwo,datatype):
+        for item in counterOne:
+            counterOne[item] += counterTwo[item]
+        return counterOne
+
     with open(twitterFilePath,'r',encoding='utf8') as twitterFile:  
         line = twitterFile.readline()
         lineNumber = 1
@@ -60,25 +67,28 @@ def processTwitterData(map,twitterFilePath,grid_counts):
                     grid_counts[id] += 1
             line = twitterFile.readline()
             lineNumber += 1
-
-                
-
+            
     #Reduce all sums of json lines to all_json_coordinates from all processes
     all_json_coordinates = comm.allreduce(total_json_read_with_coordinates)
     print(rank,"has total",total_json_read_with_coordinates,"out of",all_json_coordinates)
 
-def printFinalResults(grid_counts):
-    pprint(grid_counts)
+    #Creating an MPI sum operation (sum is a comutative operation)
+    counterSumOperation = MPI.Op.Create(sumCounter, commute=True)
+    all_grid_counts = comm.allreduce(grid_counts, op=counterSumOperation)
+    
+    #MASTER RANK prints final collected grid count output
+    if (rank == 0):
+        print("Final Counts for Tweets in Grids:")
+        pprint(all_grid_counts)
 
 def main():
     #Class containing boundaries for each grid and it's methods
     map = mapData(mapFilePath)
-
-    #Store all grid counts here
+    #Store all grid counts in a counter map object
     grid_counts = Counter({g["id"] : 0 for g in map.data})
-
     #Process each line in the twitter file
     processTwitterData(map,twitterFilePath,grid_counts)
+
 
     
 
