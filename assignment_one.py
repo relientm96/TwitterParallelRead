@@ -50,17 +50,22 @@ def processTwitterData(map,twitterFilePath,grid_counts):
     with open(twitterFilePath,'r',encoding='utf8') as twitterFile:  
         line = twitterFile.readline()
         lineNumber = 1
+        total_json_read_with_coordinates = 0
         while line:
             #Distribute line processing using the modulo operation
             if( lineNumber % comm.Get_size() == rank):
                 id = processOneTweet(map,line)
                 if( id is not None ):
+                    total_json_read_with_coordinates += 1
                     grid_counts[id] += 1
             line = twitterFile.readline()
             lineNumber += 1
-    #Gather Results when done
-    final = comm.gather(grid_counts, root=0)
-    pprint(final)    
+
+                
+
+    #Reduce all sums of json lines to all_json_coordinates from all processes
+    all_json_coordinates = comm.allreduce(total_json_read_with_coordinates)
+    print(rank,"has total",total_json_read_with_coordinates,"out of",all_json_coordinates)
 
 def printFinalResults(grid_counts):
     pprint(grid_counts)
@@ -74,6 +79,8 @@ def main():
 
     #Process each line in the twitter file
     processTwitterData(map,twitterFilePath,grid_counts)
+
+    
 
 if __name__ == "__main__":
     main()
