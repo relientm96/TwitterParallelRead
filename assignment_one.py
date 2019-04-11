@@ -55,6 +55,17 @@ def processOneTweet(map,inputLine):
         y_input = json_txt["doc"]["coordinates"]["coordinates"][1]    
     return map.idFromCoordinates(x_input,y_input)
 
+def sortAndPrint(all_grid_counts,all_json_coordinates):
+    
+    print("Total Tweets that have valid coordinates:",all_json_coordinates)
+
+    #Sort the counts in descending order, sort by their values
+    all_grid_counts = sorted(all_grid_counts.items(), key=lambda k:k[1] , reverse=True)    
+    print("Grid Counts:")
+
+    for item in all_grid_counts:
+        print("{0}: {1} posts,".format(item[0],item[1]))        
+
 def processTwitterData(map,twitterFilePath,grid_counts):
 
     #Reduce sum operation for counter module (for MPI)
@@ -66,38 +77,36 @@ def processTwitterData(map,twitterFilePath,grid_counts):
     with open(twitterFilePath,'r',encoding='utf8') as twitterFile:  
         line = twitterFile.readline()
         lineNumber = 1
-        #total_json_read_with_coordinates = 0
+        total_json_read_with_coordinates = 0
         while line:
             #Distribute line processing using the modulo operation
             if( lineNumber % comm.Get_size() == rank):
                 id = processOneTweet(map,line)
                 if( id is not None ):
-                    #total_json_read_with_coordinates += 1
+                    total_json_read_with_coordinates += 1
                     grid_counts[id] += 1
             line = twitterFile.readline()
             lineNumber += 1
             
     #Reduce all sums of json lines to all_json_coordinates from all processes
-    #all_json_coordinates = comm.allreduce(total_json_read_with_coordinates)
-    #print(rank,"has total",total_json_read_with_coordinates,"out of",all_json_coordinates)
-
+    all_json_coordinates = comm.allreduce(total_json_read_with_coordinates)
     #Creating an MPI sum operation (sum is a comutative operation)
     counterSumOperation = MPI.Op.Create(sumCounter, commute=True)
     all_grid_counts = comm.allreduce(grid_counts, op=counterSumOperation)
-    
-    #MASTER RANK prints final collected grid count output
+
+    #MASTER RANK prints final collected and gathered grid count output
     if (rank == 0):
-        print("Final Counts for Tweets in Grids:")
-        pprint(all_grid_counts)
+        sortAndPrint(all_grid_counts,all_json_coordinates)
 
 def main():
+
     #Class containing boundaries for each grid and it's methods
     map = mapData(mapFilePath)
     #Store all grid counts in a counter map object
     grid_counts = Counter({grid["id"] : 0 for grid in map.data})
     #Process each line in the twitter file
     processTwitterData(map,twitterFilePath,grid_counts)
-    
+
 
     
 
